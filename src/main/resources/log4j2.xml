@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<configuration debug="false" xmlns="http://jakarta.apache.org/log4j/">
+  <Appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+    </Console>
+    <RollingFile name="RollingFsLog"
+        fileName="log/contentopt-eval.log"
+        filePattern="log/contentopt-eval.log">
+        <PatternLayout>
+            <Pattern>%d{ISO8601} %-5p [%t] %c{1}: %m%n</Pattern>
+        </PatternLayout>
+        <Policies>
+            <SizeBasedTriggeringPolicy size="10 MB" />
+        </Policies>
+        <DefaultRolloverStrategy max="10" />
+    </RollingFile>
+  </Appenders>
+  <Loggers>
+    <Root level="debug">
+      <AppenderRef ref="Console"/>
+      <AppenderRef ref="RollingFsLog"/>
+    </Root>
+
+    <Logger name="com.kaggle.allen.text.CompoundTermsExtractor" level="warn"/>
+    <Logger name="org.apache.http" level="warn"/>
+    <Logger name="edu.uci.ics.crawler4j.crawler" level="warn"/>
+    <Logger name="org.hibernate" level="warn"/>
+    <Logger name="org.eclipse.jetty" level="warn"/>
+    <Logger name="org.springframework" level="info"/>
+    <Logger name="com.searchmetrics.ds" level="debug"/>
+    <Logger name="com.searchmetrics.contentanalysis.lucene.PhrasingTokenFilter" level="info"/>
+
+  </Loggers>
+</configuration>
