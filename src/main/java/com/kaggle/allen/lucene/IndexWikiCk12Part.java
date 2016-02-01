@@ -21,7 +21,7 @@ import com.kaggle.allen.text.Parser;
 import com.kaggle.allen.text.ParserFactory;
 import com.kaggle.allen.wiki.WikiTextUtils;
 
-public class IndexWiki {
+public class IndexWikiCk12Part {
 
     private static final FieldType TITLE_FIELD = createTitleFieldType();
     private static final FieldType CONTENT_FIELD = createContentFieldType();

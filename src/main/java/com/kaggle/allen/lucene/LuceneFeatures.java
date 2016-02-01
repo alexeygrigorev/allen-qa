@@ -28,9 +28,8 @@ public class LuceneFeatures {
 
     public static void main(String[] args) throws Exception {
 
-        FSDirectory index = FSDirectory.open(new File("data/index"));
-        DirectoryReader reader = DirectoryReader.open(index);
-        IndexSearcher searcher = new IndexSearcher(reader);
+        IndexSearcher wikiSearcher = searcher(new File("data/index"));
+        IndexSearcher ck12Searcher = searcher(new File("data/ck12-index"));
 
         Iterator<Question> training = Read.trainingData();
         Parser parser = ParserFactory.createParser();
@@ -38,20 +37,41 @@ public class LuceneFeatures {
         AtomicInteger cnt = new AtomicInteger(0);
         training.forEachRemaining(q -> {
             try {
-                List<ScoredDocument> question = queryIndex(searcher, parser, q.getContent());
-                List<ScoredDocument> a0 = queryIndex(searcher, parser, q.getAnswers().get(0));
-                List<ScoredDocument> a1 = queryIndex(searcher, parser, q.getAnswers().get(1));
-                List<ScoredDocument> a2 = queryIndex(searcher, parser, q.getAnswers().get(2));
-                List<ScoredDocument> a3 = queryIndex(searcher, parser, q.getAnswers().get(3));
-
-                System.out.println(
-                        question + "\t" + a0 + "\t" + a1 + "\t" + a2 + "\t" + a3 + "\t" + q.getCorrectAnswer());
+                search(wikiSearcher, parser, q);
+                search(ck12Searcher, parser, q);
                 cnt.incrementAndGet();
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
         });
 
+    }
+
+    private static void search(IndexSearcher searcher, Parser parser, Question q) throws IOException {
+        String question = q.getContent();
+        List<ScoredDocument> questionResults = queryIndex(searcher, parser, question);
+
+        List<List<ScoredDocument>> justAnswers = Lists.newArrayList();
+        List<List<ScoredDocument>> questionAndAnswers = Lists.newArrayList();
+
+        for (String answer : q.getAnswers()) {
+            List<ScoredDocument> docsQuestionAnswers = queryIndex(searcher, parser, question + " " + answer);
+            questionAndAnswers.add(docsQuestionAnswers);
+
+            List<ScoredDocument> docsAnswer = queryIndex(searcher, parser, answer);
+            justAnswers.add(docsAnswer);
+        }
+
+        System.out.println(
+                questionResults + "\t" + justAnswers + "\t" + questionAndAnswers + "\t" + q.getCorrectAnswer());
+
+    }
+
+    private static IndexSearcher searcher(File wikiIndex) throws IOException {
+        FSDirectory index = FSDirectory.open(wikiIndex);
+        DirectoryReader reader = DirectoryReader.open(index);
+        IndexSearcher searcher = new IndexSearcher(reader);
+        return searcher;
     }
 
     private static List<ScoredDocument> queryIndex(IndexSearcher searcher, Parser parser, String content)

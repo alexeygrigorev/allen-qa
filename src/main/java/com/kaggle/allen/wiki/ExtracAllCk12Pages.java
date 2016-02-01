@@ -7,6 +7,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,8 +23,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
-// backlinks
-///w/api.php?action=query&format=json&generator=backlinks&gbltitle=Beta%20decay&gblnamespace=0&gbldir=ascending
 public class ExtracAllCk12Pages {
 
     private static final File missing = new File("data/ck12-missing.txt");
@@ -85,7 +84,10 @@ public class ExtracAllCk12Pages {
         MapWrapper map = jsonToMap(wikiJson);
 
         List<Map<String, ?>> qRedirects = map.getList("query.redirects");
-        List<String> redirects = qRedirects.stream().map(m -> m.get("to").toString()).collect(Collectors.toList());
+        List<String> redirects = Collections.emptyList();
+        if (qRedirects.isEmpty()) {
+            redirects = qRedirects.stream().map(m -> m.get("to").toString()).collect(Collectors.toList());
+        }
 
         List<String> missingPages = Lists.newArrayList();
         @SuppressWarnings("unchecked")

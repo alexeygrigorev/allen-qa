@@ -1,5 +1,6 @@
 package com.kaggle.allen.wiki;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -27,10 +28,19 @@ public class MapWrapper {
         Map<String, ?> result = map;
         for (int i = 0; i < split.length - 1; i++) {
             String name = split[i];
-            result = (Map<String, ?>) result.get(name);
+            if (result.containsKey(name)) {
+                result = (Map<String, ?>) result.get(name);
+            } else {
+                result = Collections.emptyMap();
+            }
         }
 
-        return (List<Map<String, ?>>) result.get(split[split.length - 1]);
+        String last = split[split.length - 1];
+        if (result.containsKey(last)) {
+            return (List<Map<String, ?>>) result.get(last);
+        } else {
+            return Collections.emptyList();
+        }
     }
 
     @SuppressWarnings("unchecked")
