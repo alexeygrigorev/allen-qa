@@ -14,6 +14,8 @@ public class Features {
 
     private List<String> question;
     private List<String> answer;
+    private List<String> ngramsQuestion;
+    private List<String> ngramsAnswer;
 
     private double[] word2vecQuestion;
     private double[] word2vecAnswer;
@@ -33,7 +35,21 @@ public class Features {
     private double ck12EbookKendallTauCorr;
     private int ck12EbookBothQADocCount;
     private int ck12EbookBothQADocCountAMustHave;
-    
+
+    private List<ScoredDocument> ngramsCk12WikiQuestionResult;
+    private List<ScoredDocument> ngramsCk12WikiAnswerResult;
+    private double ngramsCk12WikiSpearmanCorr;
+    private double ngramsCk12WikiKendallTauCorr;
+    private int ngramsCk12WikiBothQADocCount;
+    private int ngramsCk12WikiBothQADocCountAMustHave;
+
+    private List<ScoredDocument> ngramsCk12EbookQuestionResult;
+    private List<ScoredDocument> ngramsCk12EbookAnswerResult;
+    private double ngramsCk12EbookSpearmanCorr;
+    private double ngramsCk12EbookKendallTauCorr;
+    private int ngramsCk12EbookBothQADocCount;
+    private int ngramsCk12EbookBothQADocCountAMustHave;
+
     private String type;
     private String source;
     private String label;
@@ -236,6 +252,118 @@ public class Features {
 
     public void setCk12EbookBothQADocCountAMustHave(int ck12EbookBothQADocCountAMustHave) {
         this.ck12EbookBothQADocCountAMustHave = ck12EbookBothQADocCountAMustHave;
+    }
+
+    public List<ScoredDocument> getNgramsCk12WikiQuestionResult() {
+        return ngramsCk12WikiQuestionResult;
+    }
+
+    public void setNgramsCk12WikiQuestionResult(List<ScoredDocument> ngramsCk12WikiQuestionResult) {
+        this.ngramsCk12WikiQuestionResult = ngramsCk12WikiQuestionResult;
+    }
+
+    public List<ScoredDocument> getNgramsCk12WikiAnswerResult() {
+        return ngramsCk12WikiAnswerResult;
+    }
+
+    public void setNgramsCk12WikiAnswerResult(List<ScoredDocument> ngramsCk12WikiAnswerResult) {
+        this.ngramsCk12WikiAnswerResult = ngramsCk12WikiAnswerResult;
+    }
+
+    public double getNgramsCk12WikiSpearmanCorr() {
+        return ngramsCk12WikiSpearmanCorr;
+    }
+
+    public void setNgramsCk12WikiSpearmanCorr(double ngramsCk12WikiSpearmanCorr) {
+        this.ngramsCk12WikiSpearmanCorr = ngramsCk12WikiSpearmanCorr;
+    }
+
+    public double getNgramsCk12WikiKendallTauCorr() {
+        return ngramsCk12WikiKendallTauCorr;
+    }
+
+    public void setNgramsCk12WikiKendallTauCorr(double ngramsCk12WikiKendallTauCorr) {
+        this.ngramsCk12WikiKendallTauCorr = ngramsCk12WikiKendallTauCorr;
+    }
+
+    public int getNgramsCk12WikiBothQADocCount() {
+        return ngramsCk12WikiBothQADocCount;
+    }
+
+    public void setNgramsCk12WikiBothQADocCount(int ngramsCk12WikiBothQADocCount) {
+        this.ngramsCk12WikiBothQADocCount = ngramsCk12WikiBothQADocCount;
+    }
+
+    public int getNgramsCk12WikiBothQADocCountAMustHave() {
+        return ngramsCk12WikiBothQADocCountAMustHave;
+    }
+
+    public void setNgramsCk12WikiBothQADocCountAMustHave(int ngramsCk12WikiBothQADocCountAMustHave) {
+        this.ngramsCk12WikiBothQADocCountAMustHave = ngramsCk12WikiBothQADocCountAMustHave;
+    }
+
+    public List<ScoredDocument> getNgramsCk12EbookQuestionResult() {
+        return ngramsCk12EbookQuestionResult;
+    }
+
+    public void setNgramsCk12EbookQuestionResult(List<ScoredDocument> ngramsCk12EbookQuestionResult) {
+        this.ngramsCk12EbookQuestionResult = ngramsCk12EbookQuestionResult;
+    }
+
+    public List<ScoredDocument> getNgramsCk12EbookAnswerResult() {
+        return ngramsCk12EbookAnswerResult;
+    }
+
+    public void setNgramsCk12EbookAnswerResult(List<ScoredDocument> ngramsCk12EbookAnswerResult) {
+        this.ngramsCk12EbookAnswerResult = ngramsCk12EbookAnswerResult;
+    }
+
+    public double getNgramsCk12EbookSpearmanCorr() {
+        return ngramsCk12EbookSpearmanCorr;
+    }
+
+    public void setNgramsCk12EbookSpearmanCorr(double ngramsCk12EbookSpearmanCorr) {
+        this.ngramsCk12EbookSpearmanCorr = ngramsCk12EbookSpearmanCorr;
+    }
+
+    public double getNgramsCk12EbookKendallTauCorr() {
+        return ngramsCk12EbookKendallTauCorr;
+    }
+
+    public void setNgramsCk12EbookKendallTauCorr(double ngramsCk12EbookKendallTauCorr) {
+        this.ngramsCk12EbookKendallTauCorr = ngramsCk12EbookKendallTauCorr;
+    }
+
+    public int getNgramsCk12EbookBothQADocCount() {
+        return ngramsCk12EbookBothQADocCount;
+    }
+
+    public void setNgramsCk12EbookBothQADocCount(int ngramsCk12EbookBothQADocCount) {
+        this.ngramsCk12EbookBothQADocCount = ngramsCk12EbookBothQADocCount;
+    }
+
+    public int getNgramsCk12EbookBothQADocCountAMustHave() {
+        return ngramsCk12EbookBothQADocCountAMustHave;
+    }
+
+    public void setNgramsCk12EbookBothQADocCountAMustHave(int ngramsCk12EbookBothQADocCountAMustHave) {
+        this.ngramsCk12EbookBothQADocCountAMustHave = ngramsCk12EbookBothQADocCountAMustHave;
+    }
+
+    public List<String> getNgramsQuestion() {
+        return ngramsQuestion;
+    }
+
+    public void setNgramsQuestion(List<String> ngramsQuestion) {
+        this.ngramsQuestion = ngramsQuestion;
+    }
+
+    public List<String> getNgramsAnswer() {
+        return ngramsAnswer;
+    }
+
+    public void setNgramsAnswer(List<String> ngramsAnswer) {
+        this.ngramsAnswer = ngramsAnswer;
     }
 
 }

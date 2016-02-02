@@ -21,10 +21,10 @@ import org.jsoup.nodes.Element;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.kaggle.allen.text.Parser;
+import com.kaggle.allen.text.FilterChain;
 import com.kaggle.allen.text.ParserFactory;
 
-public class IndexWikiCk12ConceptsEbook {
+public class IndexCk12ConceptsEbookNGrams {
 
     private static final FieldType TITLE_FIELD = createTitleFieldType();
     private static final FieldType CONTENT_FIELD = createContentFieldType();
@@ -32,7 +32,7 @@ public class IndexWikiCk12ConceptsEbook {
     public static final Version LUCENE_VERSION = Version.LUCENE_4_9;
 
     public static void main(String[] args) throws Exception {
-        File index = new File("data/ck12-index");
+        File index = new File("data/ck12-ngrams-index");
         index.mkdirs();
 
         FSDirectory directory = FSDirectory.open(index);
@@ -42,14 +42,17 @@ public class IndexWikiCk12ConceptsEbook {
         PerFieldAnalyzerWrapper analyzer = new PerFieldAnalyzerWrapper(new StandardAnalyzer(LUCENE_VERSION),
                 analyzers.build());
 
-        Parser parser = ParserFactory.createParser();
+        
+        FilterChain filterChain = ParserFactory.createFilterChain();
+        NgramExtractor extractor = new NgramExtractor(filterChain);
+
         IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(LUCENE_VERSION, analyzer));
 
         File wikiDir = new File("/home/agrigorev/Downloads/allen/ck12-concepts");
         for (String path : wikiDir.list()) {
             File file = new File(wikiDir, path);
             System.out.println(file);
-            add(file, writer, parser);
+            add(file, writer, extractor);
         }
 
         writer.commit();
@@ -57,7 +60,7 @@ public class IndexWikiCk12ConceptsEbook {
         directory.close();
     }
 
-    public static void add(File file, IndexWriter writer, Parser parser) throws Exception {
+    public static void add(File file, IndexWriter writer, NgramExtractor extractor) throws Exception {
         String htmlContent = FileUtils.readFileToString(file);
 
         org.jsoup.nodes.Document jsoupDoc = Jsoup.parse(htmlContent);
@@ -68,7 +71,7 @@ public class IndexWikiCk12ConceptsEbook {
         for (Ck12Paragraph p : paragraphs) {
             Document document = new Document();
 
-            List<String> parsedContent = parser.parse(p.text());
+            List<String> parsedContent = extractor.ngrams(p.text());
 
             document.add(new Field("content", String.join("\n", parsedContent), CONTENT_FIELD));
             document.add(new Field("document", title, TITLE_FIELD));
@@ -101,6 +104,7 @@ public class IndexWikiCk12ConceptsEbook {
 
     private static class Ck12Paragraph {
         private String title;
+        @SuppressWarnings("unused")
         private String id;
 
         private List<Element> elements = Lists.newArrayList();

@@ -11,6 +11,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.io.CharSource;
 import com.google.common.io.Resources;
+import com.kaggle.allen.lucene.NgramExtractor;
 
 /**
  * 
@@ -20,8 +21,7 @@ import com.google.common.io.Resources;
 public class ParserFactory {
 
     public static Parser createParser() throws Exception {
-        CharSource stopWordsSource = stopWordsCharSource();
-        Set<String> stopWords = ImmutableSet.copyOf(stopWordsSource.readLines());
+        FilterChain filterChain = createFilterChain();
 
         List<String> compoundTermSource = readCompoundTermDictionary().readLines();
         List<List<String>> compoundTermList = Lists.transform(compoundTermSource, s -> Arrays.asList(s.split("\\s+")));
@@ -29,15 +29,18 @@ public class ParserFactory {
         Set<List<String>> compoundTerms = ImmutableSet.copyOf(compoundTermList);
         CompoundTermsExtractor termsExtractor = new CompoundTermsExtractor(compoundTerms);
 
-        FilterChain filterChain = new FilterChain(stopWords);
         return new Parser(filterChain, termsExtractor);
     }
 
-    private static CharSource readCompoundTermDictionary() throws IOException {
-        CharSource questions = resourceToCharSource("compound-terms-questions.txt");
-        CharSource glossary = resourceToCharSource("compound-terms-glossary.txt");
-        CharSource nounPhrases = resourceToCharSource("compound-terms-noun-phrases.txt");
-        return CharSource.concat(questions, glossary, nounPhrases);
+    public static NgramExtractor createNGramExtractor() throws IOException {
+        FilterChain filterChain = createFilterChain();
+        return new NgramExtractor(filterChain);
+    }
+
+    public static FilterChain createFilterChain() throws IOException {
+        CharSource stopWordsSource = stopWordsCharSource();
+        Set<String> stopWords = ImmutableSet.copyOf(stopWordsSource.readLines());
+        return new FilterChain(stopWords);
     }
 
     private static CharSource stopWordsCharSource() {
@@ -48,6 +51,13 @@ public class ParserFactory {
     private static CharSource resourceToCharSource(String path) {
         final URL resource = Resources.getResource(path);
         return Resources.asCharSource(resource, Charsets.UTF_8);
+    }
+
+    private static CharSource readCompoundTermDictionary() throws IOException {
+        CharSource questions = resourceToCharSource("compound-terms-questions.txt");
+        CharSource glossary = resourceToCharSource("compound-terms-glossary.txt");
+        CharSource nounPhrases = resourceToCharSource("compound-terms-noun-phrases.txt");
+        return CharSource.concat(questions, glossary, nounPhrases);
     }
 
 }
