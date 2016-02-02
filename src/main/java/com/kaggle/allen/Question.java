@@ -10,13 +10,16 @@ public class Question {
         FILLING_GAP, COMPLETION, USUAL;
     }
 
+    private String source;
     private String questionId;
     private QuestionType type;
     private String content;
     private List<String> answers;
     private int correctAnswer;
 
-    public Question(String questionId, QuestionType type, String content, List<String> answers, int correctAnswer) {
+    public Question(String source, String questionId, QuestionType type, String content, List<String> answers,
+            int correctAnswer) {
+        this.source = source;
         this.questionId = questionId;
         this.type = type;
         this.content = content;
@@ -24,8 +27,12 @@ public class Question {
         this.correctAnswer = correctAnswer;
     }
 
-    public Question(String questionId, QuestionType type, String content, List<String> answers) {
-        this(questionId, type, content, answers, NO_ANSWER);
+    public Question(String source, String questionId, QuestionType type, String content, List<String> answers) {
+        this(source, questionId, type, content, answers, NO_ANSWER);
+    }
+
+    public String getSource() {
+        return source;
     }
 
     public String getQuestionId() {

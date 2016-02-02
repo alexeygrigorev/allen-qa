@@ -16,6 +16,7 @@ import com.google.common.collect.Iterators;
 import com.kaggle.allen.Question.QuestionType;
 
 public class Read {
+
     public static Iterator<Question> trainingData() throws IOException {
         Map<String, Integer> letterToIndex = ImmutableMap.of("a", 0, "b", 1, "c", 2, "d", 3);
         LineIterator li = FileUtils.lineIterator(new File("/home/agrigorev/Downloads/allen/training_set.tsv"));
@@ -34,12 +35,12 @@ public class Read {
 
             List<String> answers = Arrays.asList(split).subList(3, split.length);
             Validate.isTrue(answers.size() == 4);
-            return new Question(questionId, type, content, answers, correctAnswer);
+            return new Question("TRAIN", questionId, type, content, answers, correctAnswer);
         });
     }
 
     public static Iterator<Question> validationData() throws IOException {
-        LineIterator li = FileUtils.lineIterator(new File("/home/agrigorev/Downloads/allen/validaition_set.tsv"));
+        LineIterator li = FileUtils.lineIterator(new File("/home/agrigorev/Downloads/allen/validation_set.tsv"));
         li.next(); // header
 
         return Iterators.transform(li, line -> {
@@ -53,8 +54,12 @@ public class Read {
 
             List<String> answers = Arrays.asList(split).subList(2, split.length);
             Validate.isTrue(answers.size() == 4);
-            return new Question(questionId, type, content, answers);
+            return new Question("VALIDATION", questionId, type, content, answers);
         });
+    }
+
+    public static Iterator<Question> allData() throws IOException {
+        return Iterators.concat(trainingData(), validationData());
     }
 
 }

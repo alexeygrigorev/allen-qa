@@ -19,44 +19,11 @@ public class UnicodeUtils {
         input.codePoints().forEach(code -> {
             if (UNICODE_NORMALIZATION_MAP.containsKey(code)) {
                 result.append(UNICODE_NORMALIZATION_MAP.get(code));
-            } else if (isTokenizable(code)) {
+            } else {
                 result.append(codePointToString(code));
             }
         });
         return result.toString();
-    }
-
-    private static boolean isTokenizable(int code) {
-        // http://stackoverflow.com/a/24707189/861423
-        if (Character.isIdentifierIgnorable(code)) {
-            return false;
-        }
-
-        // http://unicode-table.com/en/blocks/control-character/
-        if (code >= 0x0001 && code <= 0x001F) {
-            return false;
-        }
-
-        // http://unicode-table.com/en/blocks/latin-1-supplement/
-        if (code >= 0x0080 && code <= 0x00A0) {
-            return false;
-        }
-
-        // http://unicode-table.com/en/blocks/high-surrogates/
-        if (code >= 0xD800 && code <= 0xDFFF) {
-            return false;
-        }
-
-        //http://unicode-table.com/en/blocks/private-use-area/
-        if (code >= 0xE000 && code <= 0xF8FF) {
-            return false;
-        }
-
-        if (code == 0xFFFD) {
-            return false;
-        }
-
-        return true;
     }
 
     private static String codePointToString(int codePoint) {
