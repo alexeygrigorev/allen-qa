@@ -3,10 +3,12 @@ package com.kaggle.allen.lucene;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.LineIterator;
+import org.apache.commons.lang.RandomStringUtils;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.miscellaneous.PerFieldAnalyzerWrapper;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -21,6 +23,8 @@ import org.apache.lucene.util.Version;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
+import com.google.common.collect.Sets;
+import com.google.common.collect.Sets.SetView;
 import com.google.common.collect.UnmodifiableIterator;
 import com.kaggle.allen.text.Parser;
 import com.kaggle.allen.text.ParserFactory;
@@ -33,7 +37,14 @@ public class IndexEntireEnWiki {
     public static final Version LUCENE_VERSION = Version.LUCENE_4_9;
 
     public static void main(String[] args) throws Exception {
-        File index = new File("data/fullenwiki-index");
+        String pathWiki = args[0];
+
+        Set<String> importantKeywords = Sets.newHashSet(FileUtils.readLines(new File("data/important_keywords.txt")));
+
+        File index = new File("data/fullenwiki-index-" + RandomStringUtils.randomAlphabetic(5));
+
+        FileUtils.write(new File("log.log"), "for " + pathWiki + " writing to " + index, true);
+
         index.mkdirs();
 
         FSDirectory directory = FSDirectory.open(index);
@@ -46,7 +57,7 @@ public class IndexEntireEnWiki {
         Parser parser = ParserFactory.createParser();
         IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(LUCENE_VERSION, analyzer));
 
-        LineIterator li = FileUtils.lineIterator(new File("/home/agrigorev/tmp/wiki-sample/enwiki-text-15k.txt"));
+        LineIterator li = FileUtils.lineIterator(new File(pathWiki));
 
         UnmodifiableIterator<List<String>> partitions = Iterators.partition(li, 1000);
 
@@ -54,7 +65,7 @@ public class IndexEntireEnWiki {
         partitions.forEachRemaining(partition -> {
             partition.parallelStream().forEach(line -> {
                 try {
-                    process(line, parser, writer, cnt);
+                    process(line, parser, writer, cnt, importantKeywords);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -66,7 +77,8 @@ public class IndexEntireEnWiki {
         directory.close();
     }
 
-    private static void process(String line, Parser parser, IndexWriter writer, AtomicInteger cnt) throws IOException {
+    private static void process(String line, Parser parser, IndexWriter writer, AtomicInteger cnt,
+            Set<String> importantKeywords) throws IOException {
         String[] split = line.split("\t");
         if (split.length < 2) {
             return;
@@ -82,17 +94,24 @@ public class IndexEntireEnWiki {
             return;
         }
 
-        add(title, content, writer, parser);
+        add(title, content, writer, parser, importantKeywords);
         int i = cnt.incrementAndGet();
         if (i % 10 == 0) {
             System.out.println(i + " " + title);
         }
     }
 
-    private static void add(String title, String content, IndexWriter writer, Parser parser) throws IOException {
+    private static void add(String title, String content, IndexWriter writer, Parser parser,
+            Set<String> importantKeywords) throws IOException {
         Document document = new Document();
 
         List<String> parsedConetnt = parser.parse(content);
+        Set<String> distinct = Sets.newHashSet(parsedConetnt);
+        SetView<String> common = Sets.intersection(importantKeywords, distinct);
+        if (common.size() < 30) {
+            return;
+        }
+
         document.add(new Field("content", String.join("\n", parsedConetnt), CONTENT_FIELD));
         document.add(new Field("title", title, TITLE_FIELD));
 
