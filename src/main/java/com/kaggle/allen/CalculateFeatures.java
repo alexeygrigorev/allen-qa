@@ -3,12 +3,11 @@ package com.kaggle.allen;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
-import org.apache.commons.math3.stat.correlation.KendallsCorrelation;
-import org.apache.commons.math3.stat.correlation.SpearmansCorrelation;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
@@ -30,6 +29,8 @@ import weka.core.matrix.DoubleVector;
 
 public class CalculateFeatures {
 
+    private static final int DOCS_BOTH_KEEP = 10;
+    private static final int DOCS_TO_SELECT = 20;
     private static final Logger LOGGER = LoggerFactory.getLogger(CalculateFeatures.class);
 
     @SuppressWarnings("resource")
@@ -37,7 +38,7 @@ public class CalculateFeatures {
         List<Question> allData = Lists.newArrayList(Read.allData());
 
         Stream<Features> featues = parseAndPivot(allData.stream());
-        featues = word2Vec(featues);
+//        featues = word2Vec(featues);
         featues = luceneWiki(featues);
         featues = luceneCk12(featues);
         featues = luceneWikiNgrams(featues);
@@ -45,7 +46,7 @@ public class CalculateFeatures {
 
         ObjectMapper mapper = new ObjectMapper();
 
-        PrintWriter pw = new PrintWriter("lucene-features-2.json");
+        PrintWriter pw = new PrintWriter("lucene-features-4.json");
         featues.map(f -> {
             try {
                 return mapper.writeValueAsString(f);
@@ -143,36 +144,44 @@ public class CalculateFeatures {
                 Query question = LuceneFeatures.createQuery(f.getQuestion());
                 Query answer = LuceneFeatures.createQuery(f.getAnswer());
 
-                List<ScoredDocument> questionDocs = LuceneFeatures.query(wikiSearcher, question, 20);
+                List<ScoredDocument> questionDocs = LuceneFeatures.query(wikiSearcher, question, DOCS_TO_SELECT);
                 f.setCk12WikiQuestionResult(questionDocs);
 
-                List<ScoredDocument> answerDocs = LuceneFeatures.query(wikiSearcher, answer, 20);
+                List<ScoredDocument> answerDocs = LuceneFeatures.query(wikiSearcher, answer, DOCS_TO_SELECT);
                 f.setCk12WikiAnswerResult(answerDocs);
-
-                double[] questionRanks = rankingArray(questionDocs);
-                double[] answerRanks = rankingArray(answerDocs);
-
-                SpearmansCorrelation spearmansCorrelation = new SpearmansCorrelation();
-                double spearman = spearmansCorrelation.correlation(questionRanks, answerRanks);
-                f.setCk12WikiSpearmanCorr(spearman);
-
-                KendallsCorrelation kendallsCorrelation = new KendallsCorrelation();
-                double kendall = kendallsCorrelation.correlation(questionRanks, answerRanks);
-                f.setCk12WikiKendallTauCorr(kendall);
 
                 Query both = LuceneFeatures.createQuery(Iterables.concat(f.getQuestion(), f.getAnswer()));
                 ScoreDoc[] bothResults = LuceneFeatures.lightQuery(wikiSearcher, both, Integer.MAX_VALUE);
-
                 f.setCk12WikiBothQADocCount(bothResults.length);
 
                 Query mustHave = LuceneFeatures.createMustHaveQuery(f.getQuestion(), f.getAnswer());
                 ScoreDoc[] mustHaveResults = LuceneFeatures.lightQuery(wikiSearcher, mustHave, Integer.MAX_VALUE);
-
                 f.setCk12WikiBothQADocCountAMustHave(mustHaveResults.length);
+
+                int[] bothResultsIds = top10Ids(bothResults);
+                f.setCk12WikiBothQADoc(bothResultsIds);
+                int[] mustHaveIds = top10Ids(mustHaveResults);
+                f.setCk12WikiBothQADocAMustHave(mustHaveIds);
+
+                f.setCk12WikiBothQAScores(top10Scores(bothResults));
+                f.setCk12WikiBothQAScoresMustHave(top10Scores(mustHaveResults));
             } catch (Exception e) {
+                e.printStackTrace();
             }
             return f;
         });
+    }
+
+    private static int[] top10Ids(ScoreDoc[] bothResults) {
+        return Arrays.stream(bothResults).limit(DOCS_BOTH_KEEP).mapToInt(s -> s.doc).toArray();
+    }
+
+    private static double[] top10Scores(ScoreDoc[] bothResults) {
+        double[] result = new double[DOCS_BOTH_KEEP];
+        for (int i = 0; i < Math.min(DOCS_BOTH_KEEP, bothResults.length); i++) {
+            result[i] = bothResults[i].score;
+        }
+        return result;
     }
 
     private static Stream<Features> luceneCk12(Stream<Features> featues) throws IOException {
@@ -184,22 +193,11 @@ public class CalculateFeatures {
                 Query question = LuceneFeatures.createQuery(f.getQuestion());
                 Query answer = LuceneFeatures.createQuery(f.getAnswer());
 
-                List<ScoredDocument> questionDocs = LuceneFeatures.query(ck12Searcher, question, 20);
+                List<ScoredDocument> questionDocs = LuceneFeatures.query(ck12Searcher, question, DOCS_TO_SELECT);
                 f.setCk12EbookQuestionResult(questionDocs);
 
-                List<ScoredDocument> answerDocs = LuceneFeatures.query(ck12Searcher, answer, 20);
+                List<ScoredDocument> answerDocs = LuceneFeatures.query(ck12Searcher, answer, DOCS_TO_SELECT);
                 f.setCk12EbookAnswerResult(answerDocs);
-
-                double[] questionRanks = rankingArray(questionDocs);
-                double[] answerRanks = rankingArray(answerDocs);
-
-                SpearmansCorrelation spearmansCorrelation = new SpearmansCorrelation();
-                double spearman = spearmansCorrelation.correlation(questionRanks, answerRanks);
-                f.setCk12EbookSpearmanCorr(spearman);
-
-                KendallsCorrelation kendallsCorrelation = new KendallsCorrelation();
-                double kendall = kendallsCorrelation.correlation(questionRanks, answerRanks);
-                f.setCk12EbookKendallTauCorr(kendall);
 
                 Query both = LuceneFeatures.createQuery(Iterables.concat(f.getQuestion(), f.getAnswer()));
                 ScoreDoc[] bothResults = LuceneFeatures.lightQuery(ck12Searcher, both, Integer.MAX_VALUE);
@@ -210,14 +208,23 @@ public class CalculateFeatures {
                 ScoreDoc[] mustHaveResults = LuceneFeatures.lightQuery(ck12Searcher, mustHave, Integer.MAX_VALUE);
 
                 f.setCk12EbookBothQADocCountAMustHave(mustHaveResults.length);
+
+                int[] bothResultsIds = top10Ids(bothResults);
+                f.setCk12EbookBothQADoc(bothResultsIds);
+                int[] mustHaveIds = top10Ids(mustHaveResults);
+                f.setCk12EbookBothQADocAMustHave(mustHaveIds);
+
+                f.setCk12EbookBothQAScores(top10Scores(bothResults));
+                f.setCk12EbookBothQAScoresMustHave(top10Scores(mustHaveResults));
             } catch (Exception e) {
+                e.printStackTrace();
             }
             return f;
         });
     }
 
     private static Stream<Features> luceneWikiNgrams(Stream<Features> featues) throws IOException {
-        LOGGER.info("w2v ngram");
+        LOGGER.info("wiki ngram");
         IndexSearcher ngramsCk12Searcher = LuceneFeatures.searcher(new File("data/ngrams-index"));
 
         return featues.map(f -> {
@@ -225,33 +232,31 @@ public class CalculateFeatures {
                 Query question = LuceneFeatures.createQuery(f.getNgramsQuestion());
                 Query answer = LuceneFeatures.createQuery(f.getNgramsAnswer());
 
-                List<ScoredDocument> questionDocs = LuceneFeatures.query(ngramsCk12Searcher, question, 20);
-                f.setNgramsCk12EbookQuestionResult(questionDocs);
+                List<ScoredDocument> questionDocs = LuceneFeatures.query(ngramsCk12Searcher, question, DOCS_TO_SELECT);
+                f.setNgramsCk12WikiQuestionResult(questionDocs);
 
-                List<ScoredDocument> answerDocs = LuceneFeatures.query(ngramsCk12Searcher, answer, 20);
-                f.setNgramsCk12EbookAnswerResult(answerDocs);
-
-                double[] questionRanks = rankingArray(questionDocs);
-                double[] answerRanks = rankingArray(answerDocs);
-
-                SpearmansCorrelation spearmansCorrelation = new SpearmansCorrelation();
-                double spearman = spearmansCorrelation.correlation(questionRanks, answerRanks);
-                f.setNgramsCk12EbookSpearmanCorr(spearman);
-
-                KendallsCorrelation kendallsCorrelation = new KendallsCorrelation();
-                double kendall = kendallsCorrelation.correlation(questionRanks, answerRanks);
-                f.setNgramsCk12EbookKendallTauCorr(kendall);
+                List<ScoredDocument> answerDocs = LuceneFeatures.query(ngramsCk12Searcher, answer, DOCS_TO_SELECT);
+                f.setNgramsCk12WikiAnswerResult(answerDocs);
 
                 Query both = LuceneFeatures.createQuery(Iterables.concat(f.getQuestion(), f.getAnswer()));
                 ScoreDoc[] bothResults = LuceneFeatures.lightQuery(ngramsCk12Searcher, both, Integer.MAX_VALUE);
 
-                f.setNgramsCk12EbookBothQADocCount(bothResults.length);
+                f.setNgramsCk12WikiBothQADocCount(bothResults.length);
 
                 Query mustHave = LuceneFeatures.createMustHaveQuery(f.getQuestion(), f.getAnswer());
                 ScoreDoc[] mustHaveResults = LuceneFeatures.lightQuery(ngramsCk12Searcher, mustHave, Integer.MAX_VALUE);
 
-                f.setNgramsCk12EbookBothQADocCountAMustHave(mustHaveResults.length);
+                f.setNgramsCk12WikiBothQADocCountAMustHave(mustHaveResults.length);
+
+                int[] bothResultsIds = top10Ids(bothResults);
+                f.setNgramsCk12WikiBothQADoc(bothResultsIds);
+                int[] mustHaveIds = top10Ids(mustHaveResults);
+                f.setNgramsCk12WikiBothQADocMustHave(mustHaveIds);
+
+                f.setNgramsCk12WikiBothQAScores(top10Scores(bothResults));
+                f.setNgramsCk12WikiBothQAScoresMustHave(top10Scores(mustHaveResults));
             } catch (Exception e) {
+                e.printStackTrace();
             }
             return f;
         });
@@ -263,25 +268,14 @@ public class CalculateFeatures {
 
         return featues.map(f -> {
             try {
-                Query question = LuceneFeatures.createQuery(f.getQuestion());
-                Query answer = LuceneFeatures.createQuery(f.getAnswer());
+                Query question = LuceneFeatures.createQuery(f.getNgramsQuestion());
+                Query answer = LuceneFeatures.createQuery(f.getNgramsAnswer());
 
-                List<ScoredDocument> questionDocs = LuceneFeatures.query(ck12Searcher, question, 20);
+                List<ScoredDocument> questionDocs = LuceneFeatures.query(ck12Searcher, question, DOCS_TO_SELECT);
                 f.setNgramsCk12EbookQuestionResult(questionDocs);
 
-                List<ScoredDocument> answerDocs = LuceneFeatures.query(ck12Searcher, answer, 20);
+                List<ScoredDocument> answerDocs = LuceneFeatures.query(ck12Searcher, answer, DOCS_TO_SELECT);
                 f.setNgramsCk12EbookAnswerResult(answerDocs);
-
-                double[] questionRanks = rankingArray(questionDocs);
-                double[] answerRanks = rankingArray(answerDocs);
-
-                SpearmansCorrelation spearmansCorrelation = new SpearmansCorrelation();
-                double spearman = spearmansCorrelation.correlation(questionRanks, answerRanks);
-                f.setNgramsCk12EbookSpearmanCorr(spearman);
-
-                KendallsCorrelation kendallsCorrelation = new KendallsCorrelation();
-                double kendall = kendallsCorrelation.correlation(questionRanks, answerRanks);
-                f.setNgramsCk12EbookKendallTauCorr(kendall);
 
                 Query both = LuceneFeatures.createQuery(Iterables.concat(f.getQuestion(), f.getAnswer()));
                 ScoreDoc[] bothResults = LuceneFeatures.lightQuery(ck12Searcher, both, Integer.MAX_VALUE);
@@ -292,7 +286,16 @@ public class CalculateFeatures {
                 ScoreDoc[] mustHaveResults = LuceneFeatures.lightQuery(ck12Searcher, mustHave, Integer.MAX_VALUE);
 
                 f.setNgramsCk12EbookBothQADocCountAMustHave(mustHaveResults.length);
+
+                int[] bothResultsIds = top10Ids(bothResults);
+                f.setNgramsCk12EbookBothQADoc(bothResultsIds);
+                int[] mustHaveIds = top10Ids(mustHaveResults);
+                f.setNgramsCk12EbookBothQADocMustHave(mustHaveIds);
+
+                f.setNgramsCk12EbookBothQAScores(top10Scores(bothResults));
+                f.setNgramsCk12EbookBothQAScoresMustHave(top10Scores(mustHaveResults));
             } catch (Exception e) {
+                e.printStackTrace();
             }
             return f;
         });
