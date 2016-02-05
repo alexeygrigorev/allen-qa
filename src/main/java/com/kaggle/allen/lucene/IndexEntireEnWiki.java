@@ -25,9 +25,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Sets.SetView;
-import com.google.common.collect.UnmodifiableIterator;
 import com.kaggle.allen.text.Parser;
 import com.kaggle.allen.text.ParserFactory;
+import com.google.common.collect.UnmodifiableIterator;
 
 public class IndexEntireEnWiki {
 
@@ -43,7 +43,7 @@ public class IndexEntireEnWiki {
 
         File index = new File("data/fullenwiki-index-" + RandomStringUtils.randomAlphabetic(5));
 
-        FileUtils.write(new File("log.log"), "for " + pathWiki + " writing to " + index, true);
+        FileUtils.write(new File("log.log"), "for " + pathWiki + " writing to " + index + "\n", true);
 
         index.mkdirs();
 

@@ -85,6 +85,11 @@
       <version>4.9.1</version>
     </dependency>
     <dependency>
+      <artifactId>lucene-misc</artifactId>
+      <groupId>org.apache.lucene</groupId>
+      <version>4.9.1</version>
+    </dependency>
+    <dependency>
       <artifactId>lucene-queryparser</artifactId>
       <groupId>org.apache.lucene</groupId>
       <version>4.9.1</version>

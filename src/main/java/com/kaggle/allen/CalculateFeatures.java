@@ -1,11 +1,13 @@
 package com.kaggle.allen;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import org.apache.lucene.search.IndexSearcher;
@@ -18,9 +20,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.kaggle.allen.lucene.LuceneFeatures;
-import com.kaggle.allen.lucene.LuceneFeatures.ScoredDocument;
+import com.kaggle.allen.lucene.LuceneFeatureExtractor;
 import com.kaggle.allen.lucene.NgramExtractor;
+import com.kaggle.allen.lucene.LuceneFeatureExtractor.ScoredDocument;
 import com.kaggle.allen.text.Parser;
 import com.kaggle.allen.text.ParserFactory;
 import com.kaggle.allen.w2v.Word2Vec;
@@ -33,20 +35,29 @@ public class CalculateFeatures {
     private static final int DOCS_TO_SELECT = 20;
     private static final Logger LOGGER = LoggerFactory.getLogger(CalculateFeatures.class);
 
-    @SuppressWarnings("resource")
     public static void main(String[] args) throws Exception {
         List<Question> allData = Lists.newArrayList(Read.allData());
 
         Stream<Features> featues = parseAndPivot(allData.stream());
-//        featues = word2Vec(featues);
-        featues = luceneWiki(featues);
-        featues = luceneCk12(featues);
-        featues = luceneWikiNgrams(featues);
-        featues = luceneCk12Ngrams(featues);
+        featues = word2Vec(featues);
+        featues = lucene(featues, "wiki_full", new File("/home/agrigorev/tmp/fullwiki-lucene/merged"),
+                Features::getQuestion, Features::getAnswer);
+        featues = lucene(featues, "wiki_ck12", new File("data/index"), Features::getQuestion, Features::getAnswer);
+        featues = lucene(featues, "ck12_ebook", new File("data/ck12-index"), Features::getQuestion,
+                Features::getAnswer);
+        featues = lucene(featues, "wiki_ck12_ngrams", new File("data/ngrams-index"), Features::getNgramsQuestion,
+                Features::getNgramsAnswer);
+        featues = lucene(featues, "ck12_ebook_ngrams", new File("data/ck12-ngrams-index"), Features::getNgramsQuestion,
+                Features::getNgramsAnswer);
 
+        writeAsJson(featues, "lucene-features-5.json");
+    }
+
+    @SuppressWarnings("resource")
+    private static void writeAsJson(Stream<Features> featues, String resultFilename) throws FileNotFoundException {
         ObjectMapper mapper = new ObjectMapper();
 
-        PrintWriter pw = new PrintWriter("lucene-features-4.json");
+        PrintWriter pw = new PrintWriter(resultFilename);
         featues.map(f -> {
             try {
                 return mapper.writeValueAsString(f);
@@ -55,6 +66,7 @@ public class CalculateFeatures {
                 return "";
             }
         }).forEach(pw::println);
+        pw.flush();
         pw.close();
     }
 
@@ -111,16 +123,16 @@ public class CalculateFeatures {
 
         return featues.map(f -> {
             DoubleVector questionVec = normalize(word2vec.vector(String.join(" ", f.getQuestion())));
-            f.setWord2vecQuestion(questionVec.getArray());
-
             DoubleVector answerVec = normalize(word2vec.vector(String.join(" ", f.getAnswer())));
-            f.setWord2vecAnswer(answerVec.getArray());
-
             double cosine = questionVec.innerProduct(answerVec);
-            f.setWord2vecCosine(cosine);
 
-            if (Double.isNaN(cosine)) {
-                f.setWord2vecMissing(true);
+            if (!Double.isNaN(cosine)) {
+                Word2VecFeatures w2v = new Word2VecFeatures();
+                // w2v.setWord2vecAnswer(answerVec.getArray());
+                // w2v.setWord2vecQuestion(questionVec.getArray());
+                w2v.setWord2vecCosine(cosine);
+
+                f.setWord2VecFeatures(w2v);
             }
 
             return f;
@@ -135,36 +147,48 @@ public class CalculateFeatures {
         return vector;
     }
 
-    private static Stream<Features> luceneWiki(Stream<Features> featues) throws IOException {
+    private static Stream<Features> lucene(Stream<Features> featues, String name, File index,
+            Function<Features, List<String>> questionFunction, Function<Features, List<String>> answerFunction)
+                    throws IOException {
         LOGGER.info("lucene wiki");
-        IndexSearcher wikiSearcher = LuceneFeatures.searcher(new File("data/index"));
+        IndexSearcher wikiSearcher = LuceneFeatureExtractor.searcher(index);
 
         return featues.map(f -> {
             try {
-                Query question = LuceneFeatures.createQuery(f.getQuestion());
-                Query answer = LuceneFeatures.createQuery(f.getAnswer());
+                LuceneFeatures luceneFeatures = new LuceneFeatures();
 
-                List<ScoredDocument> questionDocs = LuceneFeatures.query(wikiSearcher, question, DOCS_TO_SELECT);
-                f.setCk12WikiQuestionResult(questionDocs);
+                List<String> questionTokens = questionFunction.apply(f);
+                List<String> answerTokens = answerFunction.apply(f);
 
-                List<ScoredDocument> answerDocs = LuceneFeatures.query(wikiSearcher, answer, DOCS_TO_SELECT);
-                f.setCk12WikiAnswerResult(answerDocs);
+                Query question = LuceneFeatureExtractor.createQuery(questionTokens);
+                Query answer = LuceneFeatureExtractor.createQuery(answerTokens);
 
-                Query both = LuceneFeatures.createQuery(Iterables.concat(f.getQuestion(), f.getAnswer()));
-                ScoreDoc[] bothResults = LuceneFeatures.lightQuery(wikiSearcher, both, Integer.MAX_VALUE);
-                f.setCk12WikiBothQADocCount(bothResults.length);
+                List<ScoredDocument> questionDocs = LuceneFeatureExtractor.query(wikiSearcher, question,
+                        DOCS_TO_SELECT);
+                luceneFeatures.setQuestionResult(questionDocs);
 
-                Query mustHave = LuceneFeatures.createMustHaveQuery(f.getQuestion(), f.getAnswer());
-                ScoreDoc[] mustHaveResults = LuceneFeatures.lightQuery(wikiSearcher, mustHave, Integer.MAX_VALUE);
-                f.setCk12WikiBothQADocCountAMustHave(mustHaveResults.length);
+                List<ScoredDocument> answerDocs = LuceneFeatureExtractor.query(wikiSearcher, answer, DOCS_TO_SELECT);
+                luceneFeatures.setAnswerResult(answerDocs);
+
+                Query both = LuceneFeatureExtractor.createQuery(Iterables.concat(questionTokens, answerTokens));
+                ScoreDoc[] bothResults = LuceneFeatureExtractor.lightQuery(wikiSearcher, both, Integer.MAX_VALUE);
+                luceneFeatures.setBothQADocCount(bothResults.length);
+
+                Query mustHave = LuceneFeatureExtractor.createMustHaveQuery(f.getQuestion(), f.getAnswer());
+                ScoreDoc[] mustHaveResults = LuceneFeatureExtractor.lightQuery(wikiSearcher, mustHave,
+                        Integer.MAX_VALUE);
+                luceneFeatures.setBothQADocCountMustHave(mustHaveResults.length);
 
                 int[] bothResultsIds = top10Ids(bothResults);
-                f.setCk12WikiBothQADoc(bothResultsIds);
-                int[] mustHaveIds = top10Ids(mustHaveResults);
-                f.setCk12WikiBothQADocAMustHave(mustHaveIds);
+                luceneFeatures.setBothQADoc(bothResultsIds);
 
-                f.setCk12WikiBothQAScores(top10Scores(bothResults));
-                f.setCk12WikiBothQAScoresMustHave(top10Scores(mustHaveResults));
+                int[] mustHaveIds = top10Ids(mustHaveResults);
+                luceneFeatures.setBothQADocAMustHave(mustHaveIds);
+
+                luceneFeatures.setBothQAScores(top10Scores(bothResults));
+                luceneFeatures.setBothQAScoresMustHave(top10Scores(mustHaveResults));
+
+                f.addLuceneFeature(name, luceneFeatures);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -182,123 +206,6 @@ public class CalculateFeatures {
             result[i] = bothResults[i].score;
         }
         return result;
-    }
-
-    private static Stream<Features> luceneCk12(Stream<Features> featues) throws IOException {
-        LOGGER.info("ck12");
-        IndexSearcher ck12Searcher = LuceneFeatures.searcher(new File("data/ck12-index"));
-
-        return featues.map(f -> {
-            try {
-                Query question = LuceneFeatures.createQuery(f.getQuestion());
-                Query answer = LuceneFeatures.createQuery(f.getAnswer());
-
-                List<ScoredDocument> questionDocs = LuceneFeatures.query(ck12Searcher, question, DOCS_TO_SELECT);
-                f.setCk12EbookQuestionResult(questionDocs);
-
-                List<ScoredDocument> answerDocs = LuceneFeatures.query(ck12Searcher, answer, DOCS_TO_SELECT);
-                f.setCk12EbookAnswerResult(answerDocs);
-
-                Query both = LuceneFeatures.createQuery(Iterables.concat(f.getQuestion(), f.getAnswer()));
-                ScoreDoc[] bothResults = LuceneFeatures.lightQuery(ck12Searcher, both, Integer.MAX_VALUE);
-
-                f.setCk12EbookBothQADocCount(bothResults.length);
-
-                Query mustHave = LuceneFeatures.createMustHaveQuery(f.getQuestion(), f.getAnswer());
-                ScoreDoc[] mustHaveResults = LuceneFeatures.lightQuery(ck12Searcher, mustHave, Integer.MAX_VALUE);
-
-                f.setCk12EbookBothQADocCountAMustHave(mustHaveResults.length);
-
-                int[] bothResultsIds = top10Ids(bothResults);
-                f.setCk12EbookBothQADoc(bothResultsIds);
-                int[] mustHaveIds = top10Ids(mustHaveResults);
-                f.setCk12EbookBothQADocAMustHave(mustHaveIds);
-
-                f.setCk12EbookBothQAScores(top10Scores(bothResults));
-                f.setCk12EbookBothQAScoresMustHave(top10Scores(mustHaveResults));
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            return f;
-        });
-    }
-
-    private static Stream<Features> luceneWikiNgrams(Stream<Features> featues) throws IOException {
-        LOGGER.info("wiki ngram");
-        IndexSearcher ngramsCk12Searcher = LuceneFeatures.searcher(new File("data/ngrams-index"));
-
-        return featues.map(f -> {
-            try {
-                Query question = LuceneFeatures.createQuery(f.getNgramsQuestion());
-                Query answer = LuceneFeatures.createQuery(f.getNgramsAnswer());
-
-                List<ScoredDocument> questionDocs = LuceneFeatures.query(ngramsCk12Searcher, question, DOCS_TO_SELECT);
-                f.setNgramsCk12WikiQuestionResult(questionDocs);
-
-                List<ScoredDocument> answerDocs = LuceneFeatures.query(ngramsCk12Searcher, answer, DOCS_TO_SELECT);
-                f.setNgramsCk12WikiAnswerResult(answerDocs);
-
-                Query both = LuceneFeatures.createQuery(Iterables.concat(f.getQuestion(), f.getAnswer()));
-                ScoreDoc[] bothResults = LuceneFeatures.lightQuery(ngramsCk12Searcher, both, Integer.MAX_VALUE);
-
-                f.setNgramsCk12WikiBothQADocCount(bothResults.length);
-
-                Query mustHave = LuceneFeatures.createMustHaveQuery(f.getQuestion(), f.getAnswer());
-                ScoreDoc[] mustHaveResults = LuceneFeatures.lightQuery(ngramsCk12Searcher, mustHave, Integer.MAX_VALUE);
-
-                f.setNgramsCk12WikiBothQADocCountAMustHave(mustHaveResults.length);
-
-                int[] bothResultsIds = top10Ids(bothResults);
-                f.setNgramsCk12WikiBothQADoc(bothResultsIds);
-                int[] mustHaveIds = top10Ids(mustHaveResults);
-                f.setNgramsCk12WikiBothQADocMustHave(mustHaveIds);
-
-                f.setNgramsCk12WikiBothQAScores(top10Scores(bothResults));
-                f.setNgramsCk12WikiBothQAScoresMustHave(top10Scores(mustHaveResults));
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            return f;
-        });
-    }
-
-    private static Stream<Features> luceneCk12Ngrams(Stream<Features> featues) throws IOException {
-        LOGGER.info("ck12 ngrams");
-        IndexSearcher ck12Searcher = LuceneFeatures.searcher(new File("data/ck12-ngrams-index"));
-
-        return featues.map(f -> {
-            try {
-                Query question = LuceneFeatures.createQuery(f.getNgramsQuestion());
-                Query answer = LuceneFeatures.createQuery(f.getNgramsAnswer());
-
-                List<ScoredDocument> questionDocs = LuceneFeatures.query(ck12Searcher, question, DOCS_TO_SELECT);
-                f.setNgramsCk12EbookQuestionResult(questionDocs);
-
-                List<ScoredDocument> answerDocs = LuceneFeatures.query(ck12Searcher, answer, DOCS_TO_SELECT);
-                f.setNgramsCk12EbookAnswerResult(answerDocs);
-
-                Query both = LuceneFeatures.createQuery(Iterables.concat(f.getQuestion(), f.getAnswer()));
-                ScoreDoc[] bothResults = LuceneFeatures.lightQuery(ck12Searcher, both, Integer.MAX_VALUE);
-
-                f.setNgramsCk12EbookBothQADocCount(bothResults.length);
-
-                Query mustHave = LuceneFeatures.createMustHaveQuery(f.getQuestion(), f.getAnswer());
-                ScoreDoc[] mustHaveResults = LuceneFeatures.lightQuery(ck12Searcher, mustHave, Integer.MAX_VALUE);
-
-                f.setNgramsCk12EbookBothQADocCountAMustHave(mustHaveResults.length);
-
-                int[] bothResultsIds = top10Ids(bothResults);
-                f.setNgramsCk12EbookBothQADoc(bothResultsIds);
-                int[] mustHaveIds = top10Ids(mustHaveResults);
-                f.setNgramsCk12EbookBothQADocMustHave(mustHaveIds);
-
-                f.setNgramsCk12EbookBothQAScores(top10Scores(bothResults));
-                f.setNgramsCk12EbookBothQAScoresMustHave(top10Scores(mustHaveResults));
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            return f;
-        });
     }
 
     private static double[] rankingArray(List<ScoredDocument> docs) {

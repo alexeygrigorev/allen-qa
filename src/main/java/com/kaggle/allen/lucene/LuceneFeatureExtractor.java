@@ -24,7 +24,7 @@ import com.kaggle.allen.Read;
 import com.kaggle.allen.text.Parser;
 import com.kaggle.allen.text.ParserFactory;
 
-public class LuceneFeatures {
+public class LuceneFeatureExtractor {
 
     public static void main(String[] args) throws Exception {
 
