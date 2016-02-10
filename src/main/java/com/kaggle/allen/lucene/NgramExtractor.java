@@ -17,6 +17,18 @@ public class NgramExtractor {
         this.filterChain = filterChain;
     }
 
+    public List<String> ngrams(List<String> tokens) {
+        Iterable<List<String>> ngrams = Iterables.concat(ngrams(tokens, 2), ngrams(tokens, 3), ngrams(tokens, 4));
+        List<String> result = Lists.newArrayList(tokens);
+        Iterables.transform(ngrams, l -> String.join(" ", l)).forEach(result::add);
+        return result;
+    }
+
+    public List<String> parse(String content) {
+        List<String> tokens = tokenizer.lemmas(content);
+        return filterChain.process(tokens);
+    }
+
     public List<String> ngrams(String content) {
         List<String> tokens = tokenizer.lemmas(content);
         tokens = filterChain.process(tokens);

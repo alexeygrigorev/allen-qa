@@ -2,7 +2,6 @@ package com.kaggle.allen.lucene;
 
 import java.io.File;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.lucene.analysis.Analyzer;
@@ -16,15 +15,13 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.Version;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Element;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.kaggle.allen.text.FilterChain;
 import com.kaggle.allen.text.ParserFactory;
+import com.kaggle.allen.wiki.WikiTextUtils;
 
-public class IndexCk12ConceptsEbookNGrams {
+public class IndexWikiCk12NGramsSlide {
 
     private static final FieldType TITLE_FIELD = createTitleFieldType();
     private static final FieldType CONTENT_FIELD = createContentFieldType();
@@ -32,7 +29,7 @@ public class IndexCk12ConceptsEbookNGrams {
     public static final Version LUCENE_VERSION = Version.LUCENE_4_9;
 
     public static void main(String[] args) throws Exception {
-        File index = new File("data/ck12-ngrams-index");
+        File index = new File("data/ngrams-index-slide");
         index.mkdirs();
 
         FSDirectory directory = FSDirectory.open(index);
@@ -47,7 +44,7 @@ public class IndexCk12ConceptsEbookNGrams {
 
         IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(LUCENE_VERSION, analyzer));
 
-        File wikiDir = new File("/home/agrigorev/Downloads/allen/ck12-concepts");
+        File wikiDir = new File("data/wiki");
         for (String path : wikiDir.list()) {
             File file = new File(wikiDir, path);
             System.out.println(file);
@@ -60,66 +57,27 @@ public class IndexCk12ConceptsEbookNGrams {
     }
 
     public static void add(File file, IndexWriter writer, NgramExtractor extractor) throws Exception {
-        String htmlContent = FileUtils.readFileToString(file);
+        Document document = new Document();
 
-        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse(htmlContent);
-        String title = jsoupDoc.select("title").text();
+        String filename = file.getName();
+        String title = filename.substring(0, filename.length() - ".wiki".length());
+        String rawContent = FileUtils.readFileToString(file);
+        String content = WikiTextUtils.extractPlainText(rawContent);
 
-        List<Ck12Paragraph> paragraphs = paragraphs(jsoupDoc);
+        List<String> parsed = extractor.parse(content);
+        List<List<String>> slider = Slider.slide(parsed, 500, 250);
 
-        for (Ck12Paragraph p : paragraphs) {
-            Document document = new Document();
+        int cnt = 0;
+        for (List<String> window : slider) {
+            List<String> ngrams = extractor.ngrams(window);
 
-            List<String> parsedContent = extractor.ngrams(p.text());
-
-            document.add(new Field("content", String.join("\n", parsedContent), CONTENT_FIELD));
-            document.add(new Field("document", title, TITLE_FIELD));
-            document.add(new Field("title", p.title, TITLE_FIELD));
-
+            document.add(new Field("content", String.join(" \n", ngrams), CONTENT_FIELD));
+            document.add(new Field("title", title + "_" + cnt, TITLE_FIELD));
             writer.addDocument(document);
-        }
-    }
 
-    private static List<Ck12Paragraph> paragraphs(org.jsoup.nodes.Document jsoupDoc) {
-        Element body = jsoupDoc.select("body").get(0);
-
-        Ck12Paragraph current = new Ck12Paragraph("", "DUMMY");
-        List<Ck12Paragraph> all = Lists.newArrayList();
-
-        for (Element child : body.children()) {
-            if ("h1".equals(child.tagName())) {
-                all.add(current);
-                current = new Ck12Paragraph(child.text().trim(), child.id().trim());
-            }
-
-            current.add(child);
+            cnt++;
         }
 
-        all.add(current);
-        return all.stream().filter(c -> !c.elements.isEmpty()).filter(c -> !c.title.equals("References"))
-                .collect(Collectors.toList());
-
-    }
-
-    private static class Ck12Paragraph {
-        private String title;
-        @SuppressWarnings("unused")
-        private String id;
-
-        private List<Element> elements = Lists.newArrayList();
-
-        public Ck12Paragraph(String title, String id) {
-            this.title = title;
-            this.id = id;
-        }
-
-        public void add(Element child) {
-            elements.add(child);
-        }
-
-        public String text() {
-            return elements.stream().map(e -> e.text()).collect(Collectors.joining(" "));
-        }
     }
 
     private static FieldType createTitleFieldType() {

@@ -1,13 +1,11 @@
 package com.kaggle.allen;
 
-import java.util.List;
-
-import com.kaggle.allen.lucene.LuceneFeatureExtractor.ScoredDocument;
-
 public class LuceneFeatures {
 
-    private List<ScoredDocument> questionResult;
-    private List<ScoredDocument> answerResult;
+    private int[] qDocs;
+    private double[] qScores;
+    private int[] aDocs;
+    private double[] aScores;
     private int[] bothQADoc;
     private double[] bothQAScores;
     private int bothQADocCount;
@@ -16,22 +14,6 @@ public class LuceneFeatures {
     private int bothQADocCountMustHave;
 
     public LuceneFeatures() {
-    }
-
-    public List<ScoredDocument> getQuestionResult() {
-        return questionResult;
-    }
-
-    public void setQuestionResult(List<ScoredDocument> questionResult) {
-        this.questionResult = questionResult;
-    }
-
-    public List<ScoredDocument> getAnswerResult() {
-        return answerResult;
-    }
-
-    public void setAnswerResult(List<ScoredDocument> answerResult) {
-        this.answerResult = answerResult;
     }
 
     public int[] getBothQADoc() {
@@ -80,6 +62,38 @@ public class LuceneFeatures {
 
     public void setBothQADocCountMustHave(int bothQADocCountMustHave) {
         this.bothQADocCountMustHave = bothQADocCountMustHave;
+    }
+
+    public int[] getqDocs() {
+        return qDocs;
+    }
+
+    public void setqDocs(int[] qDocs) {
+        this.qDocs = qDocs;
+    }
+
+    public double[] getqScores() {
+        return qScores;
+    }
+
+    public void setqScores(double[] qScores) {
+        this.qScores = qScores;
+    }
+
+    public int[] getaDocs() {
+        return aDocs;
+    }
+
+    public void setaDocs(int[] aDocs) {
+        this.aDocs = aDocs;
+    }
+
+    public double[] getaScores() {
+        return aScores;
+    }
+
+    public void setaScores(double[] aScores) {
+        this.aScores = aScores;
     }
 
 }

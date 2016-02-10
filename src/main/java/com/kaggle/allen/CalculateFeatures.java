@@ -7,6 +7,7 @@ import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -22,38 +23,38 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.kaggle.allen.lucene.LuceneFeatureExtractor;
 import com.kaggle.allen.lucene.NgramExtractor;
-import com.kaggle.allen.lucene.LuceneFeatureExtractor.ScoredDocument;
 import com.kaggle.allen.text.Parser;
 import com.kaggle.allen.text.ParserFactory;
+import com.kaggle.allen.text.QueryExpander;
 import com.kaggle.allen.w2v.Word2Vec;
 
 import weka.core.matrix.DoubleVector;
 
 public class CalculateFeatures {
 
-    private static final int DOCS_BOTH_KEEP = 10;
-    private static final int DOCS_TO_SELECT = 20;
     private static final Logger LOGGER = LoggerFactory.getLogger(CalculateFeatures.class);
 
-    public static void main(String[] args) throws Exception {
+    private static final int DOCS_BOTH_KEEP = 10;
+    private static final int DOCS_TO_SELECT = 10;
+
+    public void run() throws Exception {
         List<Question> allData = Lists.newArrayList(Read.allData());
 
-        Stream<Features> featues = parseAndPivot(allData.stream());
-        featues = word2Vec(featues);
-        featues = lucene(featues, "wiki_full", new File("/home/agrigorev/tmp/fullwiki-lucene/merged"),
-                Features::getQuestion, Features::getAnswer);
-        featues = lucene(featues, "wiki_ck12", new File("data/index"), Features::getQuestion, Features::getAnswer);
-        featues = lucene(featues, "ck12_ebook", new File("data/ck12-index"), Features::getQuestion,
-                Features::getAnswer);
-        featues = lucene(featues, "wiki_ck12_ngrams", new File("data/ngrams-index"), Features::getNgramsQuestion,
-                Features::getNgramsAnswer);
+        Stream<Features> featues = parseAndPivot(allData.parallelStream());
+//        featues = word2Vec(featues);
+//        featues = lucene(featues, "wiki_full", new File("/home/agrigorev/tmp/fullwiki-lucene/merged"),
+//                Features::getQuestion, Features::getAnswer);
+//        featues = lucene(featues, "wiki_ck12", new File("data/index"), Features::getQuestion, Features::getAnswer);
+//        featues = lucene(featues, "ck12_ebook", new File("data/ck12-index"), Features::getQuestion,
+//                Features::getAnswer);
+//        featues = lucene(featues, "wiki_ck12_ngrams", new File("data/ngrams-index"), Features::getNgramsQuestion,
+//                Features::getNgramsAnswer);
         featues = lucene(featues, "ck12_ebook_ngrams", new File("data/ck12-ngrams-index"), Features::getNgramsQuestion,
                 Features::getNgramsAnswer);
 
-        writeAsJson(featues, "lucene-features-5.json");
+        writeAsJson(featues, "lucene-features-7-concepts.json");
     }
 
-    @SuppressWarnings("resource")
     private static void writeAsJson(Stream<Features> featues, String resultFilename) throws FileNotFoundException {
         ObjectMapper mapper = new ObjectMapper();
 
@@ -65,9 +66,14 @@ public class CalculateFeatures {
                 e.printStackTrace();
                 return "";
             }
-        }).forEach(pw::println);
+        }).forEach(line -> print(pw, line));
+
         pw.flush();
         pw.close();
+    }
+
+    private static synchronized void print(PrintWriter pw, String line) {
+        pw.println(line);
     }
 
     private static Stream<Features> parseAndPivot(Stream<Question> stream) throws Exception {
@@ -97,7 +103,7 @@ public class CalculateFeatures {
                 List<String> answerTokens = parser.parse(answer);
                 features.setAnswer(answerTokens);
 
-                List<String> answerNGrams = ngramExtractor.ngrams(question);
+                List<String> answerNGrams = ngramExtractor.ngrams(answer);
                 features.setNgramsQuestion(questionNGrams);
                 features.setNgramsAnswer(answerNGrams);
 
@@ -117,7 +123,7 @@ public class CalculateFeatures {
         });
     }
 
-    private static Stream<Features> word2Vec(Stream<Features> featues) throws Exception {
+    private Stream<Features> word2Vec(Stream<Features> featues) throws Exception {
         LOGGER.info("w2v");
         Word2Vec word2vec = Word2Vec.load();
 
@@ -147,11 +153,14 @@ public class CalculateFeatures {
         return vector;
     }
 
-    private static Stream<Features> lucene(Stream<Features> featues, String name, File index,
+    private Stream<Features> lucene(Stream<Features> featues, String name, File index,
             Function<Features, List<String>> questionFunction, Function<Features, List<String>> answerFunction)
                     throws IOException {
-        LOGGER.info("lucene wiki");
-        IndexSearcher wikiSearcher = LuceneFeatureExtractor.searcher(index);
+        IndexSearcher searcher = LuceneFeatureExtractor.searcher(index);
+
+//?        QueryExpander expander = QueryExpander.create();
+
+        AtomicInteger cnt = new AtomicInteger(0);
 
         return featues.map(f -> {
             try {
@@ -163,20 +172,20 @@ public class CalculateFeatures {
                 Query question = LuceneFeatureExtractor.createQuery(questionTokens);
                 Query answer = LuceneFeatureExtractor.createQuery(answerTokens);
 
-                List<ScoredDocument> questionDocs = LuceneFeatureExtractor.query(wikiSearcher, question,
-                        DOCS_TO_SELECT);
-                luceneFeatures.setQuestionResult(questionDocs);
+                ScoreDoc[] questionDocs = LuceneFeatureExtractor.lightQuery(searcher, question, DOCS_TO_SELECT);
+                luceneFeatures.setqDocs(top10Ids(questionDocs));
+                luceneFeatures.setqScores(top10Scores(questionDocs));
 
-                List<ScoredDocument> answerDocs = LuceneFeatureExtractor.query(wikiSearcher, answer, DOCS_TO_SELECT);
-                luceneFeatures.setAnswerResult(answerDocs);
+                ScoreDoc[] answerDocs = LuceneFeatureExtractor.lightQuery(searcher, answer, DOCS_TO_SELECT);
+                luceneFeatures.setaDocs(top10Ids(answerDocs));
+                luceneFeatures.setaScores(top10Scores(answerDocs));
 
                 Query both = LuceneFeatureExtractor.createQuery(Iterables.concat(questionTokens, answerTokens));
-                ScoreDoc[] bothResults = LuceneFeatureExtractor.lightQuery(wikiSearcher, both, Integer.MAX_VALUE);
+                ScoreDoc[] bothResults = LuceneFeatureExtractor.lightQuery(searcher, both, Integer.MAX_VALUE);
                 luceneFeatures.setBothQADocCount(bothResults.length);
 
                 Query mustHave = LuceneFeatureExtractor.createMustHaveQuery(f.getQuestion(), f.getAnswer());
-                ScoreDoc[] mustHaveResults = LuceneFeatureExtractor.lightQuery(wikiSearcher, mustHave,
-                        Integer.MAX_VALUE);
+                ScoreDoc[] mustHaveResults = LuceneFeatureExtractor.lightQuery(searcher, mustHave, Integer.MAX_VALUE);
                 luceneFeatures.setBothQADocCountMustHave(mustHaveResults.length);
 
                 int[] bothResultsIds = top10Ids(bothResults);
@@ -189,6 +198,11 @@ public class CalculateFeatures {
                 luceneFeatures.setBothQAScoresMustHave(top10Scores(mustHaveResults));
 
                 f.addLuceneFeature(name, luceneFeatures);
+
+                int i = cnt.incrementAndGet();
+                if (i % 25 == 0) {
+                    System.out.println("processing " + i + "th document...");
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -208,8 +222,8 @@ public class CalculateFeatures {
         return result;
     }
 
-    private static double[] rankingArray(List<ScoredDocument> docs) {
-        return docs.stream().mapToDouble(d -> d.getDocId()).toArray();
+    public static void main(String[] args) throws Exception {
+        new CalculateFeatures().run();
     }
 
 }

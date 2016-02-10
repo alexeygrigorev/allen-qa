@@ -58,8 +58,27 @@ public class Read {
         });
     }
 
+    public static Iterator<Question> testData() throws IOException {
+        LineIterator li = FileUtils.lineIterator(new File("/home/agrigorev/Downloads/allen/test_set.tsv"));
+        li.next(); // header
+
+        return Iterators.transform(li, line -> {
+            String[] split = line.split("\t");
+
+            String questionId = split[0];
+            String content = split[1];
+
+            boolean isFillingGapQuestion = content.contains("______");
+            QuestionType type = isFillingGapQuestion ? QuestionType.FILLING_GAP : QuestionType.USUAL;
+
+            List<String> answers = Arrays.asList(split).subList(2, split.length);
+            Validate.isTrue(answers.size() == 4);
+            return new Question("TEST", questionId, type, content, answers);
+        });
+    }
+
     public static Iterator<Question> allData() throws IOException {
-        return Iterators.concat(trainingData(), validationData());
+        return Iterators.concat(trainingData(), testData());
     }
 
 }

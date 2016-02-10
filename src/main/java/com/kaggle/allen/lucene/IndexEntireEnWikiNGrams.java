@@ -1,10 +1,13 @@
 package com.kaggle.allen.lucene;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.LineIterator;
+import org.apache.commons.lang.RandomStringUtils;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.miscellaneous.PerFieldAnalyzerWrapper;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -16,15 +19,14 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.Version;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Element;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.UnmodifiableIterator;
 import com.kaggle.allen.text.FilterChain;
 import com.kaggle.allen.text.ParserFactory;
 
-public class IndexCk12ConceptsEbookNGrams {
+public class IndexEntireEnWikiNGrams {
 
     private static final FieldType TITLE_FIELD = createTitleFieldType();
     private static final FieldType CONTENT_FIELD = createContentFieldType();
@@ -32,7 +34,12 @@ public class IndexCk12ConceptsEbookNGrams {
     public static final Version LUCENE_VERSION = Version.LUCENE_4_9;
 
     public static void main(String[] args) throws Exception {
-        File index = new File("data/ck12-ngrams-index");
+        String pathWiki = args[0];
+
+        File index = new File("data/fullenwiki-index-" + RandomStringUtils.randomAlphabetic(5));
+
+        FileUtils.write(new File("log.log"), "for " + pathWiki + " writing to " + index + "\n", true);
+
         index.mkdirs();
 
         FSDirectory directory = FSDirectory.open(index);
@@ -47,79 +54,65 @@ public class IndexCk12ConceptsEbookNGrams {
 
         IndexWriter writer = new IndexWriter(directory, new IndexWriterConfig(LUCENE_VERSION, analyzer));
 
-        File wikiDir = new File("/home/agrigorev/Downloads/allen/ck12-concepts");
-        for (String path : wikiDir.list()) {
-            File file = new File(wikiDir, path);
-            System.out.println(file);
-            add(file, writer, extractor);
-        }
+        LineIterator li = FileUtils.lineIterator(new File(pathWiki));
+
+        UnmodifiableIterator<List<String>> partitions = Iterators.partition(li, 1000);
+
+        AtomicInteger cnt = new AtomicInteger();
+        partitions.forEachRemaining(partition -> {
+            partition.parallelStream().forEach(line -> {
+                try {
+                    process(line, extractor, writer, cnt);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
+        });
 
         writer.commit();
         writer.close();
         directory.close();
     }
 
-    public static void add(File file, IndexWriter writer, NgramExtractor extractor) throws Exception {
-        String htmlContent = FileUtils.readFileToString(file);
+    private static void process(String line, NgramExtractor extractor, IndexWriter writer, AtomicInteger cnt) throws IOException {
+        String[] split = line.split("\t");
+        if (split.length < 2) {
+            return;
+        }
 
-        org.jsoup.nodes.Document jsoupDoc = Jsoup.parse(htmlContent);
-        String title = jsoupDoc.select("title").text();
+        String title = split[0];
+        if (title.toLowerCase().contains("disambiguation")) {
+            return;
+        }
 
-        List<Ck12Paragraph> paragraphs = paragraphs(jsoupDoc);
+        String content = split[1].replace("[::newline::]", "\n").trim();
+        if (content.startsWith("REDIRECT [[") && content.endsWith("]]")) {
+            return;
+        }
 
-        for (Ck12Paragraph p : paragraphs) {
-            Document document = new Document();
-
-            List<String> parsedContent = extractor.ngrams(p.text());
-
-            document.add(new Field("content", String.join("\n", parsedContent), CONTENT_FIELD));
-            document.add(new Field("document", title, TITLE_FIELD));
-            document.add(new Field("title", p.title, TITLE_FIELD));
-
-            writer.addDocument(document);
+        add(title, content, writer, extractor);
+        int i = cnt.incrementAndGet();
+        if (i % 10 == 0) {
+            System.out.println(i + " " + title);
         }
     }
 
-    private static List<Ck12Paragraph> paragraphs(org.jsoup.nodes.Document jsoupDoc) {
-        Element body = jsoupDoc.select("body").get(0);
+    private static void add(String title, String content, IndexWriter writer, NgramExtractor extractor) throws IOException {
+        Document document = new Document();
 
-        Ck12Paragraph current = new Ck12Paragraph("", "DUMMY");
-        List<Ck12Paragraph> all = Lists.newArrayList();
+        List<String> parsedConetnt = extractor.ngrams(content);
 
-        for (Element child : body.children()) {
-            if ("h1".equals(child.tagName())) {
-                all.add(current);
-                current = new Ck12Paragraph(child.text().trim(), child.id().trim());
-            }
+        List<List<String>> slider = Slider.slide(parsedConetnt, 500, 150);
 
-            current.add(child);
+        int cnt = 0;
+        for (List<String> window : slider) {
+            document.add(new Field("content", String.join("\n", window), CONTENT_FIELD));
+            document.add(new Field("title", title + "_" + cnt, TITLE_FIELD));
+            cnt++;
         }
 
-        all.add(current);
-        return all.stream().filter(c -> !c.elements.isEmpty()).filter(c -> !c.title.equals("References"))
-                .collect(Collectors.toList());
-
-    }
-
-    private static class Ck12Paragraph {
-        private String title;
-        @SuppressWarnings("unused")
-        private String id;
-
-        private List<Element> elements = Lists.newArrayList();
-
-        public Ck12Paragraph(String title, String id) {
-            this.title = title;
-            this.id = id;
-        }
-
-        public void add(Element child) {
-            elements.add(child);
-        }
-
-        public String text() {
-            return elements.stream().map(e -> e.text()).collect(Collectors.joining(" "));
-        }
+        // should be thread safe
+        writer.addDocument(document);
     }
 
     private static FieldType createTitleFieldType() {

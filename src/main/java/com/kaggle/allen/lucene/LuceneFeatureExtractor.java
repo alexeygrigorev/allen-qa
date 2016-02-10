@@ -27,7 +27,6 @@ import com.kaggle.allen.text.ParserFactory;
 public class LuceneFeatureExtractor {
 
     public static void main(String[] args) throws Exception {
-
         IndexSearcher wikiSearcher = searcher(new File("data/index"));
         IndexSearcher ck12Searcher = searcher(new File("data/ck12-index"));
 
