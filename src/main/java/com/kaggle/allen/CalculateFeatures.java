@@ -22,10 +22,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.kaggle.allen.lucene.LuceneFeatureExtractor;
+import com.kaggle.allen.lucene.LuceneFeatureExtractor.ScoredTerm;
 import com.kaggle.allen.lucene.NgramExtractor;
 import com.kaggle.allen.text.Parser;
 import com.kaggle.allen.text.ParserFactory;
-import com.kaggle.allen.text.QueryExpander;
 import com.kaggle.allen.w2v.Word2Vec;
 
 import weka.core.matrix.DoubleVector;
@@ -52,7 +52,7 @@ public class CalculateFeatures {
         featues = lucene(featues, "ck12_ebook_ngrams", new File("data/ck12-ngrams-index"), Features::getNgramsQuestion,
                 Features::getNgramsAnswer);
 
-        writeAsJson(featues, "lucene-features-7-concepts.json");
+        writeAsJson(featues, "lucene-features-8.json");
     }
 
     private static void writeAsJson(Stream<Features> featues, String resultFilename) throws FileNotFoundException {
@@ -169,6 +169,11 @@ public class CalculateFeatures {
                 List<String> questionTokens = questionFunction.apply(f);
                 List<String> answerTokens = answerFunction.apply(f);
 
+                List<ScoredTerm> questionTermWeights = LuceneFeatureExtractor.calculateWeights(searcher, questionTokens);
+                List<ScoredTerm> answerTermWeights = LuceneFeatureExtractor.calculateWeights(searcher, answerTokens);
+                luceneFeatures.setQuestionTermScores(questionTermWeights);
+                luceneFeatures.setAnswerTermScores(answerTermWeights);
+
                 Query question = LuceneFeatureExtractor.createQuery(questionTokens);
                 Query answer = LuceneFeatureExtractor.createQuery(answerTokens);
 
@@ -198,7 +203,6 @@ public class CalculateFeatures {
                 luceneFeatures.setBothQAScoresMustHave(top10Scores(mustHaveResults));
 
                 f.addLuceneFeature(name, luceneFeatures);
-
                 int i = cnt.incrementAndGet();
                 if (i % 25 == 0) {
                     System.out.println("processing " + i + "th document...");

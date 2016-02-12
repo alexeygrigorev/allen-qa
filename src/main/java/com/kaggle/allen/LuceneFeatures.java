@@ -1,5 +1,9 @@
 package com.kaggle.allen;
 
+import java.util.List;
+
+import com.kaggle.allen.lucene.LuceneFeatureExtractor.ScoredTerm;
+
 public class LuceneFeatures {
 
     private int[] qDocs;
@@ -12,6 +16,8 @@ public class LuceneFeatures {
     private int[] bothQADocAMustHave;
     private double[] bothQAScoresMustHave;
     private int bothQADocCountMustHave;
+    private List<ScoredTerm> questionTermScores;
+    private List<ScoredTerm> answerTermScores;
 
     public LuceneFeatures() {
     }
@@ -94,6 +100,22 @@ public class LuceneFeatures {
 
     public void setaScores(double[] aScores) {
         this.aScores = aScores;
+    }
+
+    public List<ScoredTerm> getQuestionTermScores() {
+        return questionTermScores;
+    }
+
+    public void setQuestionTermScores(List<ScoredTerm> questionTermScores) {
+        this.questionTermScores = questionTermScores;
+    }
+
+    public List<ScoredTerm> getAnswerTermScores() {
+        return answerTermScores;
+    }
+
+    public void setAnswerTermScores(List<ScoredTerm> answerTermScores) {
+        this.answerTermScores = answerTermScores;
     }
 
 }

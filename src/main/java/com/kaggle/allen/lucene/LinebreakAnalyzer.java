@@ -17,16 +17,6 @@ public class LinebreakAnalyzer extends Analyzer {
     @Override
     protected TokenStreamComponents createComponents(final String fieldName, final Reader reader) {
         LinebreakTokenizer tokenizer = new LinebreakTokenizer(version, reader);
-//        FilteringTokenFilter debug = new FilteringTokenFilter(version, tokenizer) {
-//            private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
-//            @Override
-//            protected boolean accept() throws IOException {
-//                System.out.println(termAtt);
-//                return true;
-//            }
-//        };
-//
-//        return new TokenStreamComponents(tokenizer, debug);
         return new TokenStreamComponents(tokenizer);
     }
 
